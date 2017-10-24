@@ -1,0 +1,10 @@
+#Build results
+[Dd]ebug/
+[Oo]bj/
+
+.vs*
+*.bak
+
+# configure files with secret
+ad_connection.json
+
