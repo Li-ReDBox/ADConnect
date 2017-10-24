@@ -78,11 +78,7 @@ namespace novell.ldap
                         continue;
                     }
                     Console.WriteLine("\n" + nextEntry.DN);
-                    LdapAttributeSet attributeSet = nextEntry.getAttributeSet();
-                    System.Collections.IEnumerator ienum = attributeSet.GetEnumerator();
-                    while (ienum.MoveNext())
-                    {
-                        LdapAttribute attribute = (LdapAttribute)ienum.Current;
+                    foreach(LdapAttribute attribute in nextEntry.getAttributeSet()) {
                         string attributeName = attribute.Name;
                         string attributeVal = attribute.StringValue;
                         Console.WriteLine(attributeName + "value:" + attributeVal);
