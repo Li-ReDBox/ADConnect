@@ -1,5 +1,8 @@
 ﻿using System;
 using System.IO;
+// using System.Net;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Configuration;
 using Novell.Directory.Ldap;
 
@@ -7,24 +10,14 @@ namespace novell.ldap
 {
     class Program
     {
-
-        // public static bool MySSLHandler(Syscert.X509Certificate certificate,
-        //     int[] certificateErrors)
-        // {
-
-        //     X509Store store = null;
-        //     X509Stores stores = X509StoreManager.CurrentUser;
-        //     //string input;
-        //     store = stores.TrustedRoot;
-
-        //     X509Certificate x509 = null;
-        //     X509CertificateCollection coll = new X509CertificateCollection();
-        //     byte[] data = certificate.GetRawCertData();
-        //     if (data != null)
-        //         x509 = new X509Certificate(data);
-
-        //     return true;
-        // }
+ private static bool CertificateValidationCallBack(object sender,
+         System.Security.Cryptography.X509Certificates.X509Certificate certificate,
+         System.Security.Cryptography.X509Certificates.X509Chain chain,
+         System.Net.Security.SslPolicyErrors sslPolicyErrors)
+    {
+        Console.WriteLine("IssuerName = {0}, Subject = {1}, EffectiveDate = {2}", certificate.Issuer, certificate.Subject, certificate.GetEffectiveDateString());
+        return certificate.GetRawCertData() != null;
+    }
 
         static void Main(string[] args)
         {
@@ -43,7 +36,10 @@ namespace novell.ldap
             String password = configuration["Password"];
             LdapConnection conn= new LdapConnection();
             // int ldapPort = 636;
-            if (useSSL) conn.SecureSocketLayer = true;
+            if (useSSL) {
+                conn.SecureSocketLayer = true;
+                conn.UserDefinedServerCertValidationDelegate += CertificateValidationCallBack;
+            }
             conn.ConnectionTimeout = 300;
             Console.WriteLine("Connecting to:" + ldapHost);
             int count = 0;
