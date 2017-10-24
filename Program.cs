@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-// using System.Net;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Configuration;
@@ -10,14 +9,41 @@ namespace novell.ldap
 {
     class Program
     {
- private static bool CertificateValidationCallBack(object sender,
-         System.Security.Cryptography.X509Certificates.X509Certificate certificate,
-         System.Security.Cryptography.X509Certificates.X509Chain chain,
-         System.Net.Security.SslPolicyErrors sslPolicyErrors)
-    {
-        Console.WriteLine("IssuerName = {0}, Subject = {1}, EffectiveDate = {2}", certificate.Issuer, certificate.Subject, certificate.GetEffectiveDateString());
-        return certificate.GetRawCertData() != null;
-    }
+        /// <summary>
+        /// Validates the SSL server certificate ourselves.
+        /// When this is used, there is something wrong with certs. So use this to check then decide how to deal it
+        /// if no one can fix the cert problem:
+        /// openssl s_client -connect remotehost:port
+        /// </summary>
+        /// <param name="sender">An object that contains state information for this
+        /// validation.</param>
+        /// <param name="cert">The certificate used to authenticate the remote party.</param>
+        /// <param name="chain">The chain of certificate authorities associated with the
+        /// remote certificate.</param>
+        /// <param name="sslPolicyErrors">One or more errors associated with the remote
+        /// certificate.</param>
+        /// <returns>Returns a boolean value that determines whether the specified
+        /// certificate is accepted for authentication; true to accept or false to
+        /// reject.</returns>
+        private static bool CertificateValidationCallBack(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        {
+            Console.WriteLine("AD server's certification has not passed the default checking,");
+            Console.WriteLine("\tHere are some more information for you to check.");
+            Console.WriteLine($"\tIssuerName = {certificate.Issuer}");
+            Console.WriteLine($"\tSubject = {certificate.Issuer}, EffectiveDate = {2}");
+            Console.WriteLine($"\tEffectiveDate = {certificate.GetEffectiveDateString()}");
+            Console.WriteLine($"\tHash string: {certificate.GetCertHashString()}");
+            Console.WriteLine("Here are some of certification errors just for you to fix it:");
+            // https://msdn.microsoft.com/en-us/library/office/jj900163(v=exchg.150).aspx shows how to not reject self-signed
+            if (chain != null && chain.ChainStatus != null)
+            {
+                foreach (X509ChainStatus status in chain.ChainStatus)
+                {
+                    Console.WriteLine($"\tStatus: {status.StatusInformation}");
+                }
+            }
+            return certificate.GetRawCertData() != null;
+        }
 
         static void Main(string[] args)
         {
@@ -28,26 +54,36 @@ namespace novell.ldap
 
             bool useSSL;
             Boolean.TryParse(configuration["UseSSL"], out useSSL);
-            Console.WriteLine(useSSL);
 
             string ldapHost = configuration["Host"];
             int ldapPort = Int16.Parse(configuration["Port"]);
             String loginDN = configuration["LoginDN"];
             String password = configuration["Password"];
             LdapConnection conn= new LdapConnection();
-            // int ldapPort = 636;
             if (useSSL) {
                 conn.SecureSocketLayer = true;
-                conn.UserDefinedServerCertValidationDelegate += CertificateValidationCallBack;
             }
             conn.ConnectionTimeout = 300;
-            Console.WriteLine("Connecting to:" + ldapHost);
+            Console.WriteLine($"Connecting to: {ldapHost}");
             int count = 0;
             try {
-                conn.Connect(ldapHost, ldapPort);
-                Console.WriteLine("Try to bind");
+                try {
+                    conn.Connect(ldapHost, ldapPort);
+                } catch (System.Security.Authentication.AuthenticationException e) {
+                    Console.WriteLine("Default certification check failed:");
+                    Console.WriteLine($"\t{e.Message}");
+                    bool forceSSL;
+                    Boolean.TryParse(configuration["ForceSSL"], out forceSSL);
+                    if (forceSSL) {
+                        Console.WriteLine("Because ForceSSL is `true`, please fix certification or authentication error before try again.");
+                        return;
+                    } else {
+                        Console.WriteLine("\ttry to by pass it!");
+                        conn.UserDefinedServerCertValidationDelegate += CertificateValidationCallBack;
+                    }
+                }
+
                 conn.Bind(loginDN, password);
-                Console.WriteLine("Bind finished");
 
                 DateTime earliest = new DateTime(2017, 1, 1);
                 string whenCreated = earliest.ToUniversalTime().ToString("yyyyMMddHHmmss.0Z");
