@@ -47,6 +47,7 @@ namespace novell.ldap
 
         static void Main(string[] args)
         {
+            Console.WriteLine("Runtime is Linux = {0}", System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux));
             IConfigurationRoot configuration = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("ad_connection.json")
