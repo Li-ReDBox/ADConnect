@@ -11,7 +11,7 @@ namespace novell.ldap
     /// <summary>
     /// Default values and functions for the namespace
     /// </summary>
-    static class DEFAULTS {
+    internal static class HELPER {
         // To describe an account
         public static string[] BASIC_PROPERTIES = {"cn", "uidNumber", "company", "department", "telephonenumber"};
         // For checking new account
@@ -52,10 +52,8 @@ namespace novell.ldap
             }
             return certificate.GetRawCertData() != null;
         }
-    }
 
-    public class Utils {
-        protected string CrateFilter(string whenCreated) {
+        public static string CrateFilter(string whenCreated) {
             // https://msdn.microsoft.com/en-us/library/aa746475(v=vs.85).aspx
             return "(&(objectCategory=User)(objectClass=User)(objectClass=Person)(!(objectClass=Computer))(mail=*@*)(!(mail=*ersa.edu.au))(whenCreated>=" + whenCreated + "))";
         }
@@ -65,7 +63,7 @@ namespace novell.ldap
         /// </summary>
         /// <param name="searchResult">SearchResult</param>
         /// <returns>Dictionary</returns>
-        protected static Dictionary<string, string> GetProperties(LdapAttributeSet searchResult)
+        public static Dictionary<string, string> GetProperties(LdapAttributeSet searchResult)
         {
             if (searchResult == null) return null;
 
@@ -103,7 +101,7 @@ namespace novell.ldap
         Dictionary<string, string> GetUser(int uidNumber, bool all=false);
     }
 
-    public class NovellLdap : Utils, IADSearcher, IDisposable
+    public class NovellLdap : IADSearcher, IDisposable
     {
         private LdapConnection conn;
         public NovellLdap(IConfigurationRoot configuration) {
@@ -132,7 +130,7 @@ namespace novell.ldap
                     return;
                 } else {
                     Console.WriteLine("\ttry to by pass it!");
-                    conn.UserDefinedServerCertValidationDelegate += DEFAULTS.CertificateValidationCallBack;
+                    conn.UserDefinedServerCertValidationDelegate += HELPER.CertificateValidationCallBack;
                 }
             }
             conn.Bind(loginDN, password);
@@ -148,7 +146,7 @@ namespace novell.ldap
             string whenCreated = earliest.ToUniversalTime().ToString("yyyyMMddHHmmss.0Z");
             Console.WriteLine("Local {0} to UTC {1}", earliest, whenCreated);
 
-            string userFilter = CrateFilter(whenCreated);
+            string userFilter = HELPER.CrateFilter(whenCreated);
 
             List<Dictionary<string, string>> results = new List<Dictionary<string, string>>();
             // Searches in the Marketing container and return all child entries just below this
@@ -156,7 +154,7 @@ namespace novell.ldap
             LdapSearchResults lsc = conn.Search("DC=ad,DC=ersa,DC=edu,DC=au",
                 LdapConnection.SCOPE_SUB,
                 userFilter,
-                DEFAULTS.BASIC_PROPERTIES,
+                HELPER.BASIC_PROPERTIES,
                 false);
 
             int count = 0;
@@ -182,7 +180,7 @@ namespace novell.ldap
                 }
                 Console.WriteLine("\n" + nextEntry.DN);
                 try {
-                    results.Add(GetProperties(nextEntry.getAttributeSet()));
+                    results.Add(HELPER.GetProperties(nextEntry.getAttributeSet()));
                 } catch (NullReferenceException ex)
                 {
                     Console.WriteLine("Not a qualified person account");
@@ -197,7 +195,7 @@ namespace novell.ldap
             string filter = string.Format("(uidNumber={0})", uidnumber);
             string[] properties = { };
             if (!all) {
-                properties = DEFAULTS.BASIC_PROPERTIES;
+                properties = HELPER.BASIC_PROPERTIES;
             }
             return new Dictionary<string, string>();
         }
