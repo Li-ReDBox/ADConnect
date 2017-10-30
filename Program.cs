@@ -14,7 +14,8 @@ namespace novell.ldap
     /// </summary>
     internal static class HELPER {
         // To describe an account
-        public static string[] BASIC_PROPERTIES = {"cn", "uidNumber", "company", "department", "telephonenumber"};
+        public static string SEARCH_BASE = "DC=ad,DC=ersa,DC=edu,DC=au";
+        public static string[] BASIC_PROPERTIES = {"cn", "uidnumber", "company", "department", "telephonenumber"};
         // For checking new account
         public static string[] CREATION_PROPERTIES = {"cn", "uidnumber", "whencreated", "mail"};
 
@@ -58,29 +59,6 @@ namespace novell.ldap
             // https://msdn.microsoft.com/en-us/library/aa746475(v=vs.85).aspx
             return "(&(objectCategory=User)(objectClass=User)(objectClass=Person)(!(objectClass=Computer))(mail=*@*)(!(mail=*ersa.edu.au))(whenCreated>=" + whenCreated + "))";
         }
-
-        /// <summary>
-        /// Convert ResultPropertyCollection to Dictionary
-        /// </summary>
-        /// <param name="searchResult">SearchResult</param>
-        /// <returns>Dictionary</returns>
-        public static Dictionary<string, string> GetProperties(LdapAttributeSet searchResult)
-        {
-            if (searchResult == null) return null;
-
-            Dictionary<string, string> filtered = new Dictionary<string, string>();
-
-            // Our checking logic depends on uidnumber
-            if (searchResult.getAttribute("uidnumber") == null)
-                throw new NullReferenceException(string.Format("{0} has no uidnumber", searchResult.getAttribute("cn")));
-
-            foreach(LdapAttribute attribute in searchResult) {
-                Console.WriteLine(attribute.Name + "value:" + attribute.StringValue);
-                filtered[attribute.Name] = attribute.StringValue;
-            }
-
-            return filtered;
-        }
     }
 #endregion
 
@@ -106,6 +84,7 @@ namespace novell.ldap
 #region NovellLdap
     public class NovellLdap : IADSearcher, IDisposable
     {
+
         private LdapConnection conn;
         public NovellLdap(IConfigurationRoot configuration) {
             bool useSSL;
@@ -152,9 +131,7 @@ namespace novell.ldap
             string userFilter = HELPER.CrateFilter(whenCreated);
 
             List<Dictionary<string, string>> results = new List<Dictionary<string, string>>();
-            // Searches in the Marketing container and return all child entries just below this
-            //container i.e. Single level search
-            LdapSearchResults lsc = conn.Search("DC=ad,DC=ersa,DC=edu,DC=au",
+            LdapSearchResults lsc = conn.Search(HELPER.SEARCH_BASE,
                 LdapConnection.SCOPE_SUB,
                 userFilter,
                 HELPER.BASIC_PROPERTIES,
@@ -183,7 +160,7 @@ namespace novell.ldap
                 }
                 Console.WriteLine("\n" + nextEntry.DN);
                 try {
-                    results.Add(HELPER.GetProperties(nextEntry.getAttributeSet()));
+                    results.Add(GetProperties(nextEntry.getAttributeSet()));
                 } catch (NullReferenceException ex)
                 {
                     Console.WriteLine("Not a qualified person account");
@@ -195,17 +172,52 @@ namespace novell.ldap
 
         public Dictionary<string, string> GetUser(int uidnumber, bool all=false)
         {
-            string filter = string.Format("(uidNumber={0})", uidnumber);
+            string filter = string.Format("(uidnumber={0})", uidnumber);
             string[] properties = { };
             if (!all) {
                 properties = HELPER.BASIC_PROPERTIES;
             }
-            return new Dictionary<string, string>();
+            LdapSearchResults lsc = conn.Search(HELPER.SEARCH_BASE,
+                LdapConnection.SCOPE_SUB,
+                filter,
+                properties,
+                false);
+            try {
+                LdapEntry entry = lsc.next();
+                return GetProperties(entry.getAttributeSet());
+            } catch (Exception e) {
+                Console.WriteLine(e.ToString());
+                return new Dictionary<string, string>();
+            }
         }
 
         public void Dispose() {
             if (conn != null) conn.Disconnect();
         }
+
+        /// <summary>
+        /// Convert ResultPropertyCollection to Dictionary
+        /// </summary>
+        /// <param name="searchResult">SearchResult</param>
+        /// <returns>Dictionary</returns>
+        private static Dictionary<string, string> GetProperties(LdapAttributeSet searchResult)
+        {
+            if (searchResult == null) return null;
+
+            Dictionary<string, string> filtered = new Dictionary<string, string>();
+
+            // Our checking logic depends on uidnumber
+            if (searchResult.getAttribute("uidnumber") == null)
+                throw new NullReferenceException(string.Format("{0} has no uidnumber", searchResult.getAttribute("cn")));
+
+            foreach(LdapAttribute attribute in searchResult) {
+                Console.WriteLine(attribute.Name.ToLower() + " = " + attribute.StringValue);
+                filtered[attribute.Name.ToLower()] = attribute.StringValue;
+            }
+
+            return filtered;
+        }
+
     }
 #endregion
 
@@ -219,11 +231,15 @@ namespace novell.ldap
                 .AddJsonFile("ad_connection.json")
                 .Build();
 
-            DateTime earliest = new DateTime(2017, 1, 1);
+            DateTime earliest = new DateTime(2017, 9, 1);
             using (NovellLdap novell = new NovellLdap(configuration)) {
                 try {
                     List<Dictionary<string, string>> results = novell.Search(earliest);
                     Console.WriteLine(results.Count);
+                    Dictionary<string, string> lastAccount = novell.GetUser(int.Parse(results[results.Count - 1]["uidnumber"]), true);
+                    Console.WriteLine("Searching non existing account resulting zero number of key:");
+                    Dictionary<string, string> nonExisting = novell.GetUser(1089);
+                    Console.WriteLine(nonExisting.Count);
                 } catch (Exception e) {
                     Console.WriteLine(e.ToString());
                 }
