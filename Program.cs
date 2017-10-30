@@ -8,6 +8,7 @@ using Novell.Directory.Ldap;
 
 namespace novell.ldap
 {
+#region HELPER
     /// <summary>
     /// Default values and functions for the namespace
     /// </summary>
@@ -81,6 +82,7 @@ namespace novell.ldap
             return filtered;
         }
     }
+#endregion
 
     /// <summary>
     /// Interface to provide search functions against active directories
@@ -101,6 +103,7 @@ namespace novell.ldap
         Dictionary<string, string> GetUser(int uidNumber, bool all=false);
     }
 
+#region NovellLdap
     public class NovellLdap : IADSearcher, IDisposable
     {
         private LdapConnection conn;
@@ -204,6 +207,7 @@ namespace novell.ldap
             if (conn != null) conn.Disconnect();
         }
     }
+#endregion
 
     class Program
     {
