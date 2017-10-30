@@ -150,10 +150,6 @@ namespace novell.ldap
 
             string userFilter = CrateFilter(whenCreated);
 
-            // To avoid referral error
-            LdapSearchConstraints constraints = new LdapSearchConstraints();
-            constraints.ReferralFollowing = true;
-
             List<Dictionary<string, string>> results = new List<Dictionary<string, string>>();
             // Searches in the Marketing container and return all child entries just below this
             //container i.e. Single level search
@@ -161,8 +157,7 @@ namespace novell.ldap
                 LdapConnection.SCOPE_SUB,
                 userFilter,
                 DEFAULTS.BASIC_PROPERTIES,
-                false,
-                constraints);
+                false);
 
             int count = 0;
             while (lsc.hasMore())
