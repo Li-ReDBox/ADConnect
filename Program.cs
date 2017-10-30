@@ -55,10 +55,32 @@ namespace novell.ldap
     }
 
     public class Utils {
-        public string CrateFilter(string whenCreated) {
+        protected string CrateFilter(string whenCreated) {
             // https://msdn.microsoft.com/en-us/library/aa746475(v=vs.85).aspx
             return "(&(objectCategory=User)(objectClass=User)(objectClass=Person)(!(objectClass=Computer))(mail=*@*)(!(mail=*ersa.edu.au))(whenCreated>=" + whenCreated + "))";
+        }
 
+        /// <summary>
+        /// Convert ResultPropertyCollection to Dictionary
+        /// </summary>
+        /// <param name="searchResult">SearchResult</param>
+        /// <returns>Dictionary</returns>
+        protected static Dictionary<string, string> GetProperties(LdapAttributeSet searchResult)
+        {
+            if (searchResult == null) return null;
+
+            Dictionary<string, string> filtered = new Dictionary<string, string>();
+
+            // Our checking logic depends on uidnumber
+            if (searchResult.getAttribute("uidnumber") == null)
+                throw new NullReferenceException(string.Format("{0} has no uidnumber", searchResult.getAttribute("cn")));
+
+            foreach(LdapAttribute attribute in searchResult) {
+                Console.WriteLine(attribute.Name + "value:" + attribute.StringValue);
+                filtered[attribute.Name] = attribute.StringValue;
+            }
+
+            return filtered;
         }
     }
 
@@ -81,10 +103,10 @@ namespace novell.ldap
         Dictionary<string, string> GetUser(int uidNumber, bool all=false);
     }
 
-    public class Novell : Utils, IADSearcher, IDisposable
+    public class NovellLdap : Utils, IADSearcher, IDisposable
     {
         private LdapConnection conn;
-        public Novell(IConfigurationRoot configuration) {
+        public NovellLdap(IConfigurationRoot configuration) {
             bool useSSL;
             Boolean.TryParse(configuration["UseSSL"], out useSSL);
 
@@ -128,10 +150,20 @@ namespace novell.ldap
 
             string userFilter = CrateFilter(whenCreated);
 
+            // To avoid referral error
+            LdapSearchConstraints constraints = new LdapSearchConstraints();
+            constraints.ReferralFollowing = true;
+
             List<Dictionary<string, string>> results = new List<Dictionary<string, string>>();
             // Searches in the Marketing container and return all child entries just below this
             //container i.e. Single level search
-            LdapSearchResults lsc = conn.Search("DC=ad,DC=ersa,DC=edu,DC=au", LdapConnection.SCOPE_SUB, userFilter, null, false);
+            LdapSearchResults lsc = conn.Search("DC=ad,DC=ersa,DC=edu,DC=au",
+                LdapConnection.SCOPE_SUB,
+                userFilter,
+                DEFAULTS.BASIC_PROPERTIES,
+                false,
+                constraints);
+
             int count = 0;
             while (lsc.hasMore())
             {
@@ -141,17 +173,25 @@ namespace novell.ldap
                     nextEntry = lsc.next();
                     count++;
                 }
+                catch (LdapReferralException) {
+                    // Nothing really serious: constraints.ReferralFollowing = true this may not be needed
+                    // https://www.novell.com/documentation/developer/ldapcsharp/?page=/documentation/developer/ldapcsharp/cnet/data/b3u4u0n.html
+                    // https://technet.microsoft.com/en-us/library/cc978014.aspx
+                    continue;
+                }
                 catch (LdapException e)
                 {
-                    Console.WriteLine("Move next error: " + e.LdapErrorMessage);
-                    // Exception is thrown, go for next entry
+                    Console.WriteLine("Move next error: {0}", e.ToString());
+                    Console.WriteLine("Error message: " + e.Message);
                     continue;
                 }
                 Console.WriteLine("\n" + nextEntry.DN);
-                foreach(LdapAttribute attribute in nextEntry.getAttributeSet()) {
-                    string attributeName = attribute.Name;
-                    string attributeVal = attribute.StringValue;
-                    Console.WriteLine(attributeName + "value:" + attributeVal);
+                try {
+                    results.Add(GetProperties(nextEntry.getAttributeSet()));
+                } catch (NullReferenceException ex)
+                {
+                    Console.WriteLine("Not a qualified person account");
+                    Console.WriteLine(ex.Message);
                 }
             }
             return results;
@@ -219,8 +259,9 @@ namespace novell.ldap
                 .Build();
 
             DateTime earliest = new DateTime(2017, 1, 1);
-            using (Novell novell = new Novell(configuration)) {
-                novell.Search(earliest);
+            using (NovellLdap novell = new NovellLdap(configuration)) {
+                List<Dictionary<string, string>> results = novell.Search(earliest);
+                Console.WriteLine(results.Count);
             };
             return;
 
