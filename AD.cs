@@ -14,12 +14,11 @@ namespace ADConnectors
             string domainName = configuration["Host"];
             string userName = configuration["Username"];
             string passwd = configuration["Password"];
+            string port = configuration["Port"];
 
             Boolean.TryParse(configuration["UseSSL"], out bool useSSL);
             Boolean.TryParse(configuration["ForceSSL"], out bool forceSSL);
-            string protocol = "LDAP://";
-            if (useSSL) protocol = "LDAPS://";
-            // FIXME: cannot use LDAPS yet
+            if (useSSL && port != "") domainName += ":" + port;
             ConnectAD(domainName, userName, passwd);
         }
 
@@ -32,22 +31,30 @@ namespace ADConnectors
         {
             if (userName != "" && passwd != "")
             {
-                Console.WriteLine("username and password were set");
+                Console.WriteLine("username and password were set and domain is {0}, {1}, {2}", domainName, userName, passwd);
                 _domain = new DirectoryEntry("LDAP://" + domainName, userName, passwd);
             }
             else
             {
                 _domain = new DirectoryEntry("LDAP://" + domainName);
             }
-            if (_domain == null)
-            {
-                new System.ArgumentException(String.Format("Cannot connect to {0}, check arguments", _domain));
-            }
+            _domain.Options.Referral = ReferralChasingOption.None;
+            //if (_domain == null)
+            //{
+            //    new System.ArgumentException(String.Format("Cannot connect to {0}, check arguments", _domain));
+            //}
             Console.WriteLine("Domain properties:");
 
-            foreach (string propName in _domain.Properties.PropertyNames)
+            try
             {
-                Console.WriteLine("{0:-20d}: {1}", propName, _domain.Properties[propName][0]);
+                foreach (string propName in _domain.Properties.PropertyNames)
+                {
+                    Console.WriteLine("{0:-20d}: {1}", propName, _domain.Properties[propName][0]);
+                }
+            } catch (Exception e)
+            {
+                Console.WriteLine(e.ToString());
+                Console.WriteLine(e.GetType().ToString());
             }
         }
 
