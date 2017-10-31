@@ -6,7 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Configuration;
 using Novell.Directory.Ldap;
 
-namespace novell.ldap
+namespace ADConnectors
 {
 #region HELPER
     /// <summary>
@@ -86,14 +86,14 @@ namespace novell.ldap
     {
 
         private LdapConnection conn;
-        public NovellLdap(IConfigurationRoot configuration) {
+        public NovellLdap(IConfiguration configuration) {
             bool useSSL;
             Boolean.TryParse(configuration["UseSSL"], out useSSL);
 
             string ldapHost = configuration["Host"];
             int ldapPort = Int16.Parse(configuration["Port"]);
-            String loginDN = configuration["LoginDN"];
-            String password = configuration["Password"];
+            string loginDN = configuration["LoginDN"];
+            string password = configuration["Password"];
             conn = new LdapConnection();
             if (useSSL) {
                 conn.SecureSocketLayer = true;
@@ -134,7 +134,7 @@ namespace novell.ldap
             LdapSearchResults lsc = conn.Search(HELPER.SEARCH_BASE,
                 LdapConnection.SCOPE_SUB,
                 userFilter,
-                HELPER.BASIC_PROPERTIES,
+                HELPER.CREATION_PROPERTIES,
                 false);
 
             int count = 0;
@@ -226,24 +226,40 @@ namespace novell.ldap
         static void Main(string[] args)
         {
             Console.WriteLine("Runtime is Linux = {0}", System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux));
-            IConfigurationRoot configuration = new ConfigurationBuilder()
+            IConfiguration configuration = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("ad_connection.json")
                 .Build();
-
             DateTime earliest = new DateTime(2017, 9, 1);
-            using (NovellLdap novell = new NovellLdap(configuration)) {
-                try {
-                    List<Dictionary<string, string>> results = novell.Search(earliest);
-                    Console.WriteLine(results.Count);
-                    Dictionary<string, string> lastAccount = novell.GetUser(int.Parse(results[results.Count - 1]["uidnumber"]), true);
-                    Console.WriteLine("Searching non existing account resulting zero number of key:");
-                    Dictionary<string, string> nonExisting = novell.GetUser(1089);
-                    Console.WriteLine(nonExisting.Count);
-                } catch (Exception e) {
-                    Console.WriteLine(e.ToString());
-                }
-            };
+
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)) {
+                AD eRSA = new AD(configuration);
+                List<Dictionary<string, string>> results = eRSA.Search(earliest);
+                Console.WriteLine(results.Count);
+                Dictionary<string, string> lastAccount = eRSA.GetUser(int.Parse(results[results.Count - 1]["uidnumber"]), true);
+                Console.WriteLine("Searching non existing account resulting zero number of key:");
+                Dictionary<string, string> nonExisting = eRSA.GetUser(1089);
+                Console.WriteLine(nonExisting == null);
+            }
+            else
+            {
+                using (NovellLdap novell = new NovellLdap(configuration))
+                {
+                    try
+                    {
+                        List<Dictionary<string, string>> results = novell.Search(earliest);
+                        Console.WriteLine(results.Count);
+                        Dictionary<string, string> lastAccount = novell.GetUser(int.Parse(results[results.Count - 1]["uidnumber"]), true);
+                        Console.WriteLine("Searching non existing account resulting it is null:");
+                        Dictionary<string, string> nonExisting = novell.GetUser(1089);
+                        Console.WriteLine(nonExisting.Count);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e.ToString());
+                    }
+                };
+            }
         }
     }
 }

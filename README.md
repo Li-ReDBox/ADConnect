@@ -6,7 +6,7 @@ The project needs these dependencies:
 
 ```shell
 dotnet add package Microsoft.Extensions.Configuration
-dotnet add Microsoft.Extensions.Configuration.Json
+dotnet add package Microsoft.Extensions.Configuration.Json
 dotnet add package Novell.Directory.Ldap.NETStandard --version 2.3.8
 ```
 
